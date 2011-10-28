@@ -14,8 +14,7 @@
 # vanity me - list peeps ordered by twitter followers
 #
 
-Path     = require "path"
-sprintf  = require(Path.resolve(Path.join(__dirname, "..", "lib", "sprintf"))).sprintf
+sprintf = require("sprintf").sprintf
 
 countFollowers = (msg, ids, cb) ->
   counts = []
