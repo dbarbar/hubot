@@ -14,7 +14,8 @@
 # vanity me - list peeps ordered by twitter followers
 #
 
-sprintf = require("sprintf").sprintf
+Path     = require "path"
+sprintf  = require("sprintf").sprintf
 
 countFollowers = (msg, ids, cb) ->
   counts = []
@@ -54,4 +55,3 @@ module.exports = (robot) ->
             msg.send output
         else
           msg.reply "Sorry, not right now. Twitter's returning a #{res.statusCode} error"
-
