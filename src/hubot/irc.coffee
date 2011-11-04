@@ -34,6 +34,10 @@ class IrcBot extends Robot
       server:   process.env.HUBOT_IRC_SERVER
       password: process.env.HUBOT_IRC_PASSWORD
       nickpass: process.env.HUBOT_IRC_NICKSERV_PASSWORD
+      fakessl:  process.env.HUBOT_IRC_SERVER_FAKE_SSL or false
+      unflood:  process.env.HUBOT_IRC_UNFLOOD or false
+      debug:    process.env.HUBOT_IRC_DEBUG or false
+
 
     console.log options
 
@@ -43,6 +47,8 @@ class IrcBot extends Robot
           port: options.port,
           stripColors: true,
           secure: if options.port is "6697" then true else false,
+          selfSigned: options.fakessl,
+          floodProtection: options.unflood
         }
 
     unless options.nickpass
@@ -63,18 +69,18 @@ class IrcBot extends Robot
 
     bot.addListener 'message', (from, to, message) ->
       console.log "From #{from} to #{to}: #{message}"
+      
+      user = self.userForName from
+      unless user?
+        id = (new Date().getTime() / 1000).toString().replace('.','')
+        user = self.userForId id
+        user.name = from
 
-      if message.match new RegExp "^#{options.nick}", "i"
-        unless user_id[from]
-          user_id[from] = next_id
-          next_id = next_id + 1
-
-      user = new Robot.User user_id[from]
-      user.name = from
       if to.match(/^[&#]/)
         user.room = to
         console.log "#{to} <#{from}> #{message}"
       else
+        user.room = null
         console.log "msg <#{from}> #{message}"
 
       self.receive new Robot.TextMessage(user, message)
@@ -93,6 +99,10 @@ class IrcBot extends Robot
 
     bot.addListener 'kick', (channel, who, _by, reason) ->
         console.log('%s was kicked from %s by %s: %s', who, channel, _by, reason)
+
+    bot.addListener 'invite', (channel, from) ->
+      console.log('%s invite you to join %s', from, channel)
+      bot.join channel
 
     @bot = bot
 
