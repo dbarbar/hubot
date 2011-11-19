@@ -8,16 +8,18 @@ class Robot
   # dispatch them to matching listeners.
   #
   # path - String directory full of Hubot scripts to load.
-  constructor: (path, name = "Hubot") ->
+  constructor: (adapterPath, adapter, name = "Hubot") ->
     @name        = name
     @brain       = new Robot.Brain
+    @alias       = false
+    @adapter     = null
     @commands    = []
     @Response    = Robot.Response
     @listeners   = []
     @loadPaths   = []
     @enableSlash = false
 
-    @load path if path
+    @loadAdapter adapterPath, adapter
 
   # Public: Adds a Listener that attempts to match incoming messages based on
   # a Regex.
@@ -47,8 +49,9 @@ class Robot
       console.log "WARNING: The regex in question was #{regex.toString()}\n"
 
     pattern = re.join("/") # combine the pattern back again
-    if @enableSlash
-      newRegex = new RegExp("^(?:\/|#{@name}[:,]?)\\s*(?:#{pattern})", modifiers)
+    if @alias
+      alias = @alias.replace(/[-[\]{}()*+?.,\\^$|#\s]/g, "\\$&") # escape alias for regexp
+      newRegex = new RegExp("^(?:#{alias}|#{@name}[:,]?)\\s*(?:#{pattern})", modifiers)
     else
       newRegex = new RegExp("^#{@name}[:,]?\\s*(?:#{pattern})", modifiers)
 
@@ -108,10 +111,26 @@ class Robot
       require(full) @
       @parseHelp "#{path}/#{file}"
 
+  # Load the adapter Hubot is going to use.
+  #
+  # path    - A String of the path to adapter if local.
+  # adapter - A String of the adapter name to use.
+  #
+  # Returns nothing.
+  loadAdapter: (path, adapter) ->
+    try
+      path = if adapter in [ "campfire", "shell" ]
+        "#{path}/#{adapter}"
+      else
+        "hubot-#{adapter}"
+
+      @adapter = require("#{path}").use(@)
+    catch err
+      console.log "Can't load adapter '#{adapter}', try installing the package"
+
   # Public: Help Commands for Running Scripts
   #
   # Returns an array of help commands for running scripts
-  #
   helpCommands: () ->
     @commands.sort()
 
@@ -127,6 +146,59 @@ class Robot
         break    if !(line[0] == '#' or line.substr(0, 2) == '//')
         continue if !line.match('-')
         @commands.push line[2..line.length]
+
+  # Public: Get an Array of User objects stored in the brain.
+  users: ->
+    @brain.data.users
+
+  # Public: Get a User object given a unique identifier.
+  userForId: (id, options) ->
+    user = @brain.data.users[id]
+    unless user
+      user = new Robot.User id, options
+      @brain.data.users[id] = user
+    user
+
+  # Public: Get a User object given a name.
+  userForName: (name) ->
+    result = null
+    lowerName = name.toLowerCase()
+    for k of (@brain.data.users or { })
+      if @brain.data.users[k]['name'].toLowerCase() is lowerName
+        result = @brain.data.users[k]
+    result
+
+  # Public: Get all users whose names match fuzzyName. Currently, match
+  # means 'starts with', but this could be extended to match initials,
+  # nicknames, etc.
+  #
+  usersForRawFuzzyName: (fuzzyName) ->
+    lowerFuzzyName = fuzzyName.toLowerCase()
+    user for key, user of (@brain.data.users or {}) when (
+         user.name.toLowerCase().lastIndexOf(lowerFuzzyName, 0) == 0)
+      
+  # Public: If fuzzyName is an exact match for a user, returns an array with
+  # just that user. Otherwise, returns an array of all users for which
+  # fuzzyName is a raw fuzzy match (see usersForRawFuzzyName).
+  #
+  usersForFuzzyName: (fuzzyName) ->
+    matchedUsers = @usersForRawFuzzyName(fuzzyName)
+    lowerFuzzyName = fuzzyName.toLowerCase()
+    # We can scan matchedUsers rather than all users since usersForRawFuzzyName
+    # will include exact matches
+    for user in matchedUsers
+      return [user] if user.name.toLowerCase() is lowerFuzzyName
+          
+    matchedUsers
+
+  run: ->
+    @adapter.run()
+
+class Robot.Adapter
+  # An adapter is a specific interface to a chat source for robots.
+  #
+  # robot - A Robot instance.
+  constructor: (@robot) ->
 
   # Public: Raw method for sending data back to the chat source.  Extend this.
   #
@@ -154,29 +226,73 @@ class Robot
   # Public: Raw method for shutting the bot down.
   # Extend this.
   close: ->
-    @brain.close()
+    @robot.brain.close()
 
-  users: () ->
-    @brain.data.users
+  # Public: Dispatch a received message to the robot.
+  #
+  # message - A TextMessage instance of the received message.
+  #
+  # Returns nothing.
+  receive: (message) ->
+    @robot.receive message
+
+  # Public: Get an Array of User objects stored in the brain.
+  users: ->
+    @robot.users
 
   # Public: Get a User object given a unique identifier
-  #
   userForId: (id, options) ->
-    user = @brain.data.users[id]
-    unless user
-      user = new Robot.User id, options
-      @brain.data.users[id] = user
-    user
+    @robot.userForId id, options
 
   # Public: Get a User object given a name
-  #
   userForName: (name) ->
-    result = null
-    lowerName = name.toLowerCase()
-    for k of (@brain.data.users or { })
-      if @brain.data.users[k]['name'].toLowerCase() is lowerName
-        result = @brain.data.users[k]
-    result
+    @robot.userForName name
+
+  # Public: Get all users whose names match fuzzyName. Currently, match
+  # means 'starts with', but this could be extended to match initials,
+  # nicknames, etc.
+  #
+  usersForRawFuzzyName: (fuzzyName) ->
+    @robot.usersForRawFuzzyName fuzzyName
+
+  # Public: If fuzzyName is an exact match for a user, returns an array with
+  # just that user. Otherwise, returns an array of all users for which
+  # fuzzyName is a raw fuzzy match (see usersForRawFuzzyName).
+  #
+  usersForFuzzyName: (fuzzyName) ->
+    @robot.usersForFuzzyName fuzzyName
+
+  # Public: Creates a scoped http client with chainable methods for
+  # modifying the request.  This doesn't actually make a request though.
+  # Once your request is assembled, you can call `get()`/`post()`/etc to
+  # send the request.
+  #
+  # url - String URL to access.
+  #
+  # Examples:
+  #
+  #     res.http("http://example.com")
+  #       # set a single header
+  #       .header('Authorization', 'bearer abcdef')
+  #
+  #       # set multiple headers
+  #       .headers(Authorization: 'bearer abcdef', Accept: 'application/json')
+  #
+  #       # add URI query parameters
+  #       .query(a: 1, b: 'foo & bar')
+  #
+  #       # make the actual request
+  #       .get() (err, res, body) ->
+  #         console.log body
+  #
+  #       # or, you can POST data
+  #       .post(data) (err, res, body) ->
+  #         console.log body
+  #
+  # Returns a ScopedClient instance.
+  http: (url) ->
+    @httpClient.create(url)
+
 
 class Robot.User
   # Represents a participating user in the chat.
@@ -198,14 +314,25 @@ class Robot.Brain extends EventEmitter
 
     @resetSaveInterval 5
 
+  # Emits the 'save' event so that 'brain' scripts can handle persisting.
+  #
+  # Returns nothing.
   save: ->
     @emit 'save', @data
 
+  # Emits the 'close' event so that 'brain' scripts can handle closing.
+  #
+  # Returns nothing.
   close: ->
     clearInterval @saveInterval
     @save()
     @emit 'close'
 
+  # Reset the interval between save function calls.
+  #
+  # seconds - An Integer of seconds between saves.
+  #
+  # Returns nothing.
   resetSaveInterval: (seconds) ->
     clearInterval @saveInterval if @saveInterval
     @saveInterval = setInterval =>
@@ -306,7 +433,7 @@ class Robot.Response
   #
   # Returns nothing.
   send: (strings...) ->
-    @robot.send @message.user, strings...
+    @robot.adapter.send @message.user, strings...
 
   # Public: Posts a topic changing message
   #
@@ -315,7 +442,7 @@ class Robot.Response
   #
   # Returns nothing.
   topic: (strings...) ->
-    @robot.topic @message.user, strings...
+    @robot.adapter.topic @message.user, strings...
 
   # Public: Posts a message mentioning the current user.
   #
@@ -324,7 +451,7 @@ class Robot.Response
   #
   # Returns nothing.
   reply: (strings...) ->
-    @robot.reply @message.user, strings...
+    @robot.adapter.reply @message.user, strings...
 
   # Public: Picks a random item from the given items.
   #
@@ -365,6 +492,9 @@ class Robot.Response
   http: (url) ->
     @httpClient.create(url)
 
-Robot.Response.prototype.httpClient = require 'scoped-http-client'
+HttpClient = require 'scoped-http-client'
+
+Robot.Response::httpClient = HttpClient
+Robot::httpClient = HttpClient
 
 module.exports = Robot
