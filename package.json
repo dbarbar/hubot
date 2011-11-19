@@ -30,7 +30,11 @@
     "xml2js": "0.1.x",
     "wolfram": "0.1.1",
     "hashlib": "1.0.1",
-    "wwwdude": "0.1.0"
+    "wwwdude": "0.1.0",
+    "underscore": ">= 1.2.1",
+    "underscore.string": ">= 1.1.6",
+    "cradle": "0.5.7",
+    "clark": "*"
 
   },
 
