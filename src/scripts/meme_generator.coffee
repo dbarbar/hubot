@@ -14,6 +14,12 @@
 # <text> TOO DAMN <high> - Generates THE RENT IS TOO DAMN HIGH guy
 #
 # Good news everyone! <news> - Generates Professor Farnsworth
+#
+# khanify <text> - TEEEEEEEEEEEEEEEEEXT!
+#
+# Not sure if <text> or <text> - Generates Futurama Fry
+#
+# Yo dawg <text> so <text> - Generates Yo Dawg
 
 module.exports = (robot) ->
   robot.respond /Y U NO (.+)/i, (msg) ->
@@ -46,18 +52,26 @@ module.exports = (robot) ->
     memeGenerator msg, 1591, 112464, msg.match[1], msg.match[2], (url) ->
       msg.send url
 
+  robot.respond /khanify (.*)/i, (msg) ->
+    memeGenerator msg, 6443, 1123022, "", khanify(msg.match[1]), (url) ->
+      msg.send url
+
+  robot.respond /(NOT SURE IF .*) (OR .*)/i, (msg) ->
+    memeGenerator msg, 305, 84688, msg.match[1], msg.match[2], (url) ->
+      msg.send url
+
+  robot.respond /(YO DAWG .*) (SO .*)/i, (msg) ->
+	  memeGenerator msg, 79, 108785, msg.match[1], msg.match[2], (url) ->
+      msg.send url
+
 memeGenerator = (msg, generatorID, imageID, text0, text1, callback) ->
   username = process.env.HUBOT_MEMEGEN_USERNAME
   password = process.env.HUBOT_MEMEGEN_PASSWORD
+  preferredDimensions = process.env.HUBOT_MEMEGEN_DIMENSIONS
 
-  unless username
-    msg.send "MemeGenerator username isn't set. Sign up at http://memegenerator.net"
-    msg.send "Then set the HUBOT_MEMEGEN_USERNAME environment variable"
-    return
-
-  unless password
-    msg.send "MemeGenerator password isn't set. Sign up at http://memegenerator.net"
-    msg.send "Then set the HUBOT_MEMEGEN_PASSWORD environment variable"
+  unless username? and password?
+    msg.send "MemeGenerator account isn't setup. Sign up at http://memegenerator.net"
+    msg.send "Then ensure the HUBOT_MEMEGEN_USERNAME and HUBOT_MEMEGEN_PASSWORD environment variables are set"
     return
 
   msg.http('http://version1.api.memegenerator.net/Instance_Create')
@@ -71,11 +85,23 @@ memeGenerator = (msg, generatorID, imageID, text0, text1, callback) ->
       text1: text1
     .get() (err, res, body) ->
       result = JSON.parse(body)['result']
-      if result? and result['instanceUrl']? and result['instanceImageUrl']?
+      if result? and result['instanceUrl']? and result['instanceImageUrl']? and result['instanceID']?
+        instanceID = result['instanceID']
         instanceURL = result['instanceUrl']
         img = result['instanceImageUrl']
         msg.http(instanceURL).get() (err, res, body) ->
           # Need to hit instanceURL so that image gets generated
-          callback img
+          if preferredDimensions?
+            callback "http://images.memegenerator.net/instances/#{preferredDimensions}/#{instanceID}.jpg"
+          else
+            callback "http://memegenerator.net#{img}"
       else
         msg.reply "Sorry, I couldn't generate that image."
+
+khanify = (msg) ->
+  msg = msg.toUpperCase()
+  vowels = [ 'A', 'E', 'I', 'O', 'U' ]
+  index = -1
+  for v in vowels when msg.lastIndexOf(v) > index
+    index = msg.lastIndexOf(v)
+  "#{msg.slice 0, index}#{Array(10).join msg.charAt(index)}#{msg.slice index}!!!!!"
