@@ -1,3 +1,58 @@
+v2.1.2
+======
+* Update behaviour of finishing further execution of listeners
+* Scripts are now loaded in the following order
+  * Scripts defined in `./hubot-scripts.json` are loaded in order
+  * Scripts are loaded alphabetically from `/scripts`
+
+v2.1.1
+======
+* The hwhoops release, finish/done behavior is handled elsewhere
+
+v2.1.0
+======
+* Introduce Response.finish() to indicate that a message should not be
+  passed on to any other listeners
+* Scripts are evaluated in the following order
+  * `./scripts` is loaded alphabetically
+  * The contents of `./hubot-scripts.json` is loaded in order
+
+    module.exports = (robot) ->
+      robot.respond /\s*yo\s*\\?/i, (msg) ->
+        msg.reply "Yo!"
+        msg.finish()
+
+
+v2.0.7
+======
+* Update topic and logger scoping fixups - Horace Ko
+* Don't exit the process if listening to a room is denied
+
+v2.0.6
+======
+* Don't kill all username looks if some users don't have name attribute
+
+v2.0.5
+======
+* All adapters have been removed except for shell and campfire
+* Better win32 compatability
+* Campfire reconnects on streaming errors on a per-room basis
+
+v2.0.0
+======
+* Major adapter overhaul, they're now external - Tom Bell
+* Shell adapter now functions like a REPL - Tom Bell
+* Improved logging using log.js - Tom Bell
+* Search help commands - Gabriel Horner
+* Improvements to roles.coffee - Daniel Schauenberg
+
+Upgrading
+---------
+If you are not using the Campfire or Shell adapters please be aware before
+upgrading that adapters have been moved out of the code of hubot and you should
+install the hubot adapters from npm when people make them available. Until your
+adapter is available you may wish to remain on v1.1.11.
+
 v1.1.11
 =======
 * support self-signed SSL certs for IRC - Ville Lautanala <lautis@gmail.com>
@@ -90,3 +145,4 @@ v1.0.3
 * Ensure people are running node 0.4.x - Corey Donohoe <atmos@atmos.org>
 * Doc fixups - Aitor García Rey <aitor@linkingpaths.com>
 * Twilio adapter support - Tom Bell <tomb@tombell.org.uk>
+
